@@ -34,6 +34,7 @@ def get_transactions():
     all_removed = []
     new_transactions_count = 0
     duplicate_transactions_count = 0
+    ALLOWED_SUBTYPES = {'checking', 'savings', 'credit card'}
     print("==> Entered /api/transactions route")
 
     try:
@@ -196,6 +197,8 @@ def get_transactions():
         for plaid_item in plaid_items:
             accounts = get_account_balance(plaid_item.decrypted_access_token)
             for account in accounts:
+                if str(account.get('subtype', '')).lower() not in ALLOWED_SUBTYPES:
+                    continue
                 account_id = account['account_id']
                 current_balance = account['balances']['current']
 
@@ -230,11 +233,14 @@ def get_transactions():
         print("416359 ==> Starting Opening Balance calculation")
         for plaid_item in plaid_items:
             print(f"416359 ==> Processing Plaid item: {plaid_item.item_id}")
+            bank_name = fetch_institution_name(plaid_item.decrypted_access_token)
             accounts = get_account_balance(plaid_item.decrypted_access_token)
+            for account in accounts:
+                if str(account.get('subtype', '')).lower() not in ALLOWED_SUBTYPES:
+                    continue
             for account in accounts:
                 account_id = account['account_id']
                 account_name = account['name']
-                bank_name = fetch_institution_name(plaid_item.access_token)
                 current_balance = account['balances']['current']
                 print(f"416359 ==> Account {account_name} ({account_id}) current balance: {current_balance}")
 

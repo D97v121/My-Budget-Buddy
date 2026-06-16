@@ -32,6 +32,9 @@ def index():
     user_id = current_user.id
     user = User.query.get(user_id)
     form = TransactionForm()
+    now = datetime.now()
+    hour = now.hour
+    time_of_day = "morning" if hour < 12 else "afternoon" if hour < 17 else "evening"
 
     logging.debug("Index route accessed")
     moneyTable = Money.query.filter_by(user_id=user_id).first()
@@ -243,5 +246,5 @@ def index():
     show_link_section = not show_graphs
         
     return render_template("index.html", show_graphs=show_graphs, show_link_section=show_link_section, form=form, account_balances=account_balances, moneyTable=moneyTable, left_in_spend=left_in_spend, tags_list=tags_list, colors=colors, counts=counts, tag_names=tag_names, spending_color=spending_color, total_spend=total_spend, totalSave=totalSave, totalGive=totalGive, totalInvest=totalInvest, money_gained_this_month=money_gained_this_month,
-    money_lost_this_month=money_lost_this_month)
+    money_lost_this_month=money_lost_this_month, now=now, time_of_day=time_of_day)
 

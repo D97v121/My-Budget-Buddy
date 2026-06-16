@@ -3,54 +3,120 @@
 {% block body %}
 
 {% if show_graphs %}
-<div class="account-balances container mt-4">
-  <h2 class="mb-3">Account Balances</h2>
-  <ul class="list-group">
-    {% for account in account_balances %}
-      <li class="list-group-item d-flex justify-content-between align-items-center">
-        {{ account.name }}
-        <span class="badge bg-success rounded-pill">
-          {{ account.available | usd }}
-        </span>
-      </li>
-    {% else %}
-      <li class="list-group-item text-muted">No linked accounts found.</li>
-    {% endfor %}
-  </ul>
+<div class="db-wrap">
+
+  <p class="db-greeting">Good {{ time_of_day }}, {{ current_user.name.split()[0] }}</p>
+  <p class="db-subgreet">Here's your financial snapshot for {{ now.strftime('%B %Y') }}.</p>
+
+  <!-- Monthly metric cards -->
+  <div class="db-metrics">
+    <div class="db-metric">
+      <div class="db-metric-label">Saved this month</div>
+      <div class="db-metric-val db-teal">{{ totalSave | usd }}</div>
+    </div>
+    <div class="db-metric">
+      <div class="db-metric-label">Spent this month</div>
+      <div class="db-metric-val db-red">{{ total_spend | usd }}</div>
+    </div>
+    <div class="db-metric">
+      <div class="db-metric-label">Given this month</div>
+      <div class="db-metric-val">{{ totalGive | usd }}</div>
+    </div>
+    <div class="db-metric">
+      <div class="db-metric-label">Invested this month</div>
+      <div class="db-metric-val">{{ totalInvest | usd }}</div>
+    </div>
+  </div>
+
+  <!-- Charts row -->
+  <div class="db-chart-row">
+    <div class="db-card">
+      <div class="db-card-title">Spending left</div>
+      <div class="db-chart-wrap">
+        <canvas id="myChart" width="180" height="180"></canvas>
+      </div>
+      <p class="db-chart-sub">{{ left_in_spend | usd }} left to spend</p>
+    </div>
+    <div class="db-card">
+      <div class="db-card-title">Money distribution</div>
+      <div class="db-chart-wrap">
+        <canvas id="myChart2" width="180" height="180"></canvas>
+      </div>
+      <p class="db-chart-sub">Save · Spend · Give · Invest</p>
+    </div>
+    <div class="db-card">
+      <div class="db-card-title">Income vs. expense</div>
+      <div class="db-chart-wrap">
+        <canvas id="myChart3" width="180" height="180"></canvas>
+      </div>
+      <p class="db-chart-sub">{{ money_gained_this_month | usd }} in · {{ money_lost_this_month | usd }} out</p>
+    </div>
+  </div>
+
+  <!-- Accounts + AI row -->
+  <div class="db-bottom-row">
+    <div class="db-card">
+      <div class="db-card-title">Linked accounts</div>
+      <ul class="db-accounts">
+        {% for account in account_balances %}
+          <li class="db-account-row">
+            <span class="db-account-name">
+              <span class="db-dot"></span>{{ account.name }}
+            </span>
+            <span class="db-account-bal {% if account.available and account.available < 0 %}db-red{% else %}db-teal{% endif %}">
+              {{ account.available | usd }}
+            </span>
+          </li>
+        {% else %}
+          <li class="db-empty">No linked accounts found.</li>
+        {% endfor %}
+      </ul>
+    </div>
+
+    <div class="db-card db-ai-card">
+      <div class="db-card-title">Budget assistant</div>
+      <div class="db-ai-row">
+        <input
+          type="text"
+          id="aiQuestionInput"
+          class="db-ai-input"
+          placeholder="How much did I spend on food last month?"
+        />
+        <button id="askAiSubmit" class="db-ai-btn">Ask</button>
+      </div>
+      <div id="aiResponse" class="db-ai-response" style="display:none;"></div>
+    </div>
+  </div>
+
 </div>
- <div class="stats-container">
-  <div class="stat1">
-    <canvas id="myChart" width="400" height="400"></canvas>
-    <div class="circleLabel">{{ left_in_spend | usd }} left</div>
-  </div>
-  <div class="stat2">
-    <canvas id="myChart2" width="400" height="400"></canvas>
-    <div class="circleLabel">Money distribution</div>
-  </div>
-  <div class="stat1">
-    <canvas id="myChart3" width="400" height="400"></canvas>
-    <div class="circleLabel">Income vs. Expense</div>
-  </div>
+
+<!-- Transaction form (hidden, triggered elsewhere if needed) -->
+<div style="display:none;">
+  <form id="transactionFormEl" method="POST">
+    {{ form.hidden_tag() }}
+  </form>
 </div>
+
 {% endif %}
+
 {% if show_link_section %}
 <div class="parallax-section">
   <div class="parallax-background">
-    <img src="static/scales_background.jpeg" alt="Company Logo" class="p_background_img" >
+    <img src="static/scales_background.jpeg" alt="" class="p_background_img">
   </div>
   <div class="parallax-content">
     <h1 class="hero-title">Track Your Finances</h1>
     <p class="hero-subtitle">Simple Stewardship</p>
     <form id="plaidForm" action="/api/create_link_token" method="POST">
-      {{ form.hidden_tag() }}  <!-- Flask-WTF automatically includes CSRF token -->
+      {{ form.hidden_tag() }}
       <button type="submit" id="link-button" class="hero-btn">Link Accounts</button>
     </form>
-  <div id="transactionStatus" class="text-center mt-3" style="font-weight: bold; display: none;"></div>
+    <div id="transactionStatus" class="text-center mt-3" style="font-weight: bold; display: none;"></div>
   </div>
 </div>
-
 {% endif %}
-<!-- LOADING OVERLAY -->
+
+<!-- Loading overlay -->
 <div id="loadingOverlay" style="display: none;">
   <div class="overlay-background"></div>
   <div class="overlay-content">
@@ -61,225 +127,337 @@
   </div>
 </div>
 
-<div class="card p-3 mt-4 shadow-sm" style="max-width: 600px; margin: 0 auto;">
-  <h5 class="text-center mb-3">💬 Ask Your Budget Assistant</h5>
-  <input
-    type="text"
-    id="aiQuestionInput"
-    class="form-control mb-2"
-    placeholder="e.g. How much did I spend on food last month?"
-  />
-  <button id="askAiSubmit" class="btn btn-primary w-100">Ask</button>
-  <div id="aiResponse" class="mt-3 text-center fw-bold"></div>
-</div>
-
-
 <style>
+.db-wrap {
+  font-family: 'Inter', sans-serif;
+  padding: 2rem 1.5rem;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.db-greeting {
+  font-size: 22px;
+  font-weight: 500;
+  color: #2c3e50;
+  margin-bottom: 4px;
+}
+
+.db-subgreet {
+  font-size: 14px;
+  color: #6c757d;
+  margin-bottom: 1.75rem;
+}
+
+/* Metric cards */
+.db-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 1.5rem;
+}
+
+.db-metric {
+  background: #f8f9fa;
+  border-radius: 10px;
+  padding: 1rem 1.1rem;
+}
+
+.db-metric-label {
+  font-size: 11px;
+  color: #6c757d;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+}
+
+.db-metric-val {
+  font-size: 22px;
+  font-weight: 500;
+  color: #2c3e50;
+}
+
+.db-teal { color: #0F6E56 !important; }
+.db-red  { color: #993C1D !important; }
+
+/* Shared card */
+.db-card {
+  background: #ffffff;
+  border: 0.5px solid rgba(0,0,0,0.1);
+  border-radius: 12px;
+  padding: 1.25rem;
+}
+
+.db-card-title {
+  font-size: 11px;
+  font-weight: 500;
+  color: #6c757d;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 1rem;
+}
+
+/* Chart row */
+.db-chart-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.db-chart-wrap {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 160px;
+}
+
+.db-chart-sub {
+  font-size: 12px;
+  text-align: center;
+  color: #6c757d;
+  margin-top: 10px;
+  margin-bottom: 0;
+}
+
+/* Bottom row */
+.db-bottom-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr);
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+/* Accounts list */
+.db-accounts {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.db-account-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 10px;
+  background: #f8f9fa;
+  border-radius: 8px;
+}
+
+.db-account-name {
+  font-size: 14px;
+  color: #2c3e50;
+  display: flex;
+  align-items: center;
+}
+
+.db-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #1D9E75;
+  display: inline-block;
+  margin-right: 8px;
+  flex-shrink: 0;
+}
+
+.db-account-bal {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.db-empty {
+  font-size: 14px;
+  color: #6c757d;
+  padding: 8px 0;
+}
+
+
+.db-ai-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.db-ai-input {
+  flex: 1;
+  height: 38px;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  padding: 0 12px;
+  font-size: 14px;
+  font-family: 'Inter', sans-serif;
+  color: #2c3e50;
+  background: #f8f9fa;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.db-ai-input:focus {
+  border-color: #1D9E75;
+  background: #ffffff;
+}
+
+.db-ai-btn {
+  background: #1D9E75;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 0 18px;
+  font-size: 14px;
+  font-family: 'Inter', sans-serif;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  white-space: nowrap;
+}
+
+.db-ai-btn:hover {
+  background: #0F6E56;
+}
+
+.db-ai-response {
+  padding: 10px 12px;
+  background: #f0faf6;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #2c3e50;
+  line-height: 1.6;
+}
+
+/* Loading overlay */
 #loadingOverlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
   z-index: 9999;
 }
 
 .overlay-background {
-  background: rgba(0, 0, 0, 0.6);
-  width: 100%;
-  height: 100%;
+  background: rgba(0,0,0,0.6);
+  width: 100%; height: 100%;
   position: absolute;
 }
 
 .overlay-content {
   position: absolute;
-  top: 50%;
-  left: 50%;
+  top: 50%; left: 50%;
   transform: translate(-50%, -50%);
   text-align: center;
 }
+
+@media (max-width: 700px) {
+  .db-metrics { grid-template-columns: repeat(2, 1fr); }
+  .db-chart-row { grid-template-columns: 1fr; }
+  .db-bottom-row { grid-template-columns: 1fr; }
+}
 </style>
 
-
-<!-- Bootstrap JS -->
 <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
-
 <script>
-
   async function getCSRFToken() {
     let cookies = document.cookie.split("; ");
     for (let cookie of cookies) {
-        let [name, value] = cookie.split("=");
-        if (name === "csrf_token") return value;
+      let [name, value] = cookie.split("=");
+      if (name === "csrf_token") return value;
     }
     return null;
-}
-
+  }
 
   leftInSpend = "{{ left_in_spend }}";
   total_spend = "{{ total_spend }}";
   totalSave = "{{ totalSave }}";
   totalGive = "{{ totalGive }}";
   totalInvest = "{{ totalInvest }}";
-  spendingColor = "{{ spending_color }}"; 
-  money_lost_this_month = "{{money_lost_this_month}}";
-  money_gained_this_month = "{{money_gained_this_month}}";
+  spendingColor = "{{ spending_color }}";
+  money_lost_this_month = "{{ money_lost_this_month }}";
+  money_gained_this_month = "{{ money_gained_this_month }}";
   var counts = {{ counts|tojson|safe }};
   var colors = {{ colors|tojson|safe }};
   var tagNames = {{ tag_names|tojson|safe }};
-  
-  
-  
-document.addEventListener("DOMContentLoaded", function () {
-  const linkButton = document.getElementById("link-button");
-  
-  if (!linkButton) {
-    return;
-  }
-  // Click handler for the Link button
-  linkButton.addEventListener("click", async function () {
-    event.preventDefault(); 
-    const csrfToken = document.querySelector("input[name='csrf_token']").value;
 
-    fetch("/api/create_link_token", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-CSRF-Token": csrfToken
-      },
-    })
-      .then((response) => response.json())
-      .then((data) => {
-        const handler = Plaid.create({
-          token: data.link_token, // Use the link token returned from the server
-          onSuccess: function (public_token, metadata) {
-            // Send the public_token to your server to exchange it for an access_token
+  document.addEventListener("DOMContentLoaded", function () {
+    const linkButton = document.getElementById("link-button");
+    if (!linkButton) return;
 
-            const statusDiv = document.getElementById('transactionStatus');
-            statusDiv.style.display = 'block';
-            statusDiv.style.color = 'red';
-            statusDiv.textContent = 'Adding transactions... Do not refresh or leave!';
+    linkButton.addEventListener("click", async function () {
+      event.preventDefault();
+      const csrfToken = document.querySelector("input[name='csrf_token']").value;
 
-            fetch("/api/set_access_token", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json", 
-                "X-CSRF-Token": csrfToken
-              },
-              body: JSON.stringify({
-                public_token: public_token,
-              }),
-            })
-              .then((response) => response.json())
-              .then((data) => {
-                console.log("Access token obtained:", data);
-                addTransactionsWithFeedback();
-                // Optionally, you can now fetch account data or display a success message
-              })
-              .catch((error) => {
-                console.error("Error exchanging public token:", error);
-              });
-          },
-          onExit: function (err, metadata) {
-            // Optionally, handle when the user exits the Link flow
-            if (err) {
-              console.error("Error during Link flow:", err);
-            }
-          },
-        });
-        handler.open(); // Open the Plaid Link modal
+      fetch("/api/create_link_token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken },
       })
-      .catch((error) => {
-        console.error("Error fetching link token:", error);
-      });
+        .then(r => r.json())
+        .then(data => {
+          const handler = Plaid.create({
+            token: data.link_token,
+            onSuccess: function (public_token, metadata) {
+              const statusDiv = document.getElementById('transactionStatus');
+              if (statusDiv) {
+                statusDiv.style.display = 'block';
+                statusDiv.style.color = 'red';
+                statusDiv.textContent = 'Adding transactions... Do not refresh or leave!';
+              }
+              fetch("/api/set_access_token", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken },
+                body: JSON.stringify({ public_token }),
+              })
+                .then(r => r.json())
+                .then(() => addTransactionsWithFeedback())
+                .catch(err => console.error("Error exchanging public token:", err));
+            },
+            onExit: function (err) { if (err) console.error("Plaid exit error:", err); }
+          });
+          handler.open();
+        })
+        .catch(err => console.error("Error fetching link token:", err));
+    });
   });
-});
 
-function startPollingTransactions() {
-    const retryDelay = 3000;  // 3 seconds
-    const maxRetries = 20;
-    let attempts = 0;
-
-    function poll() {
-        fetch('/api/transactions?item_id=${item_id}')
-            .then(response => {
-                if (response.status === 202) {
-                    console.log("Transactions not ready yet...");
-                    attempts++;
-                    if (attempts < maxRetries) {
-                        setTimeout(poll, retryDelay);
-                    } else {
-                        alert("Still waiting on your bank data. Try again shortly.");
-                    }
-                } else if (response.ok) {
-                    response.json().then(data => {
-                        console.log("Transactions ready!", data);
-                        renderTransactions(data.recent_transactions);
-                    });
-                } else {
-                    console.error("Unexpected error:", response.statusText);
-                }
-            })
-            .catch(error => console.error("Polling error:", error));
-    }
-
-    poll();
-}
-
-async function addTransactionsWithFeedback() {
+  async function addTransactionsWithFeedback() {
     const loadingOverlay = document.getElementById('loadingOverlay');
     loadingOverlay.style.display = 'block';
-
     try {
-        const response = await fetch('/api/transactions');
-        const data = await response.json();
-
-        if (response.ok && data.status === 'success') {
-            location.reload();
-        } else if (response.status === 202) {
-            loadingOverlay.querySelector('p').textContent = data.message || 'Waiting on bank data. Please try again shortly.';
-        } else {
-            loadingOverlay.querySelector('p').textContent = data.error || 'An error occurred while adding transactions.';
-            loadingOverlay.querySelector('.spinner-border').style.display = 'none';
-        }
-    } catch (err) {
-        console.error('Transaction fetch error:', err);
-        loadingOverlay.querySelector('p').textContent = 'A network error occurred. Please try again.';
+      const response = await fetch('/api/transactions');
+      const data = await response.json();
+      if (response.ok && data.status === 'success') {
+        location.reload();
+      } else if (response.status === 202) {
+        loadingOverlay.querySelector('p').textContent = data.message || 'Waiting on bank data. Please try again shortly.';
+      } else {
+        loadingOverlay.querySelector('p').textContent = data.error || 'An error occurred.';
         loadingOverlay.querySelector('.spinner-border').style.display = 'none';
+      }
+    } catch (err) {
+      console.error('Transaction fetch error:', err);
+      loadingOverlay.querySelector('p').textContent = 'A network error occurred. Please try again.';
+      loadingOverlay.querySelector('.spinner-border').style.display = 'none';
     }
-}
-
-document.getElementById("askAiSubmit").addEventListener("click", () => {
-  const questionInput = document.getElementById("aiQuestionInput");
-  const question = questionInput.value.trim();
-  const responseDiv = document.getElementById("aiResponse");
-
-  if (!question) {
-    responseDiv.textContent = "Please enter a question.";
-    return;
   }
 
-  responseDiv.innerHTML = "⏳ Thinking...";
-
-  fetch("/api/chat", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ message: question })
-})
-  .then(res => res.json())
-  .then(data => {
-    if (data.error) {
-      responseDiv.textContent = `⚠️ ${data.error}`;
-    } else {
-      responseDiv.innerHTML = data.reply;
-    }
-  })
-  .catch(err => {
-    console.error("AI Error:", err);
-    responseDiv.textContent = "❌ Something went wrong.";
-  });
-});
-
+  const askBtn = document.getElementById("askAiSubmit");
+  if (askBtn) {
+    askBtn.addEventListener("click", () => {
+      const question = document.getElementById("aiQuestionInput").value.trim();
+      const responseDiv = document.getElementById("aiResponse");
+      if (!question) { responseDiv.style.display = 'block'; responseDiv.textContent = "Please enter a question."; return; }
+      responseDiv.style.display = 'block';
+      responseDiv.textContent = "Thinking...";
+      fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: question })
+      })
+        .then(r => r.json())
+        .then(data => {
+          responseDiv.innerHTML = data.error ? `⚠️ ${data.error}` : data.reply;
+        })
+        .catch(() => { responseDiv.textContent = "Something went wrong."; });
+    });
+  }
 </script>
 
 {% endblock %}
