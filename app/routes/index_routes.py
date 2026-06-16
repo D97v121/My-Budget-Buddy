@@ -166,7 +166,7 @@ def index():
     # Add account balances
     account_balances = []
     for item in plaid_items:
-        access_token = item.access_token
+        access_token = item.decrypted_access_token
         def _token_env(token: str) -> str:
             try:
                 return token.split("-")[1]
@@ -196,19 +196,27 @@ def index():
                 db.session.delete(item)   # <-- delete row instead of setting NULL
                 db.session.commit()
 
-            return redirect(url_for("pplaid.create_link_token"))  # relink in prod
+            return redirect(url_for("plaid.create_link_token"))  # relink in prod
 
-        accounts = client.accounts_get(AccountsGetRequest(access_token=access_token)).to_dict()['accounts']
-        print("PLAID_ENV:", PLAID_ENV)
-        print("ACCESS TOKEN:", access_token[:40])
-        print("TOKEN ENV:", access_token.split("-")[1]) 
-        for acct in accounts:
-            account_balances.append({
-                'name': acct['name'],
-                'available': acct['balances']['available'],
-                'current': acct['balances']['current'],
-                'currency': acct['balances']['iso_currency_code']
-            })
+        try:
+            accounts = client.accounts_get(AccountsGetRequest(access_token=access_token)).to_dict()['accounts']
+            print("PLAID_ENV:", PLAID_ENV)
+            print("ACCESS TOKEN:", access_token[:40])
+            print("TOKEN ENV:", access_token.split("-")[1])
+            ALLOWED_SUBTYPES = {'checking', 'savings', 'credit card'}
+            for acct in accounts:
+                if str(acct['subtype']) in ALLOWED_SUBTYPES:
+                    account_balances.append({
+                        'name': acct['name'],
+                        'available': acct['balances']['available'],
+                        'current': acct['balances']['current'],
+                        'currency': acct['balances']['iso_currency_code']
+                    })
+        except Exception as e:
+            logging.error(f"Plaid accounts_get failed for item {item.id}: {e}")
+            # Remove the broken token so user can re-link
+            db.session.delete(item)
+            db.session.commit()
     
     now = datetime.now()
     current_year = now.year

@@ -13,7 +13,6 @@ class PlaidItem(db.Model):
     cursor = db.Column(db.String, nullable=True)
     institution_id = db.Column(db.String, nullable=True)  # Add this line
     institution_name = db.Column(db.String, nullable=True) 
-    created_at = db.Column(DateTime, default=datetime.utcnow)
 
 
     # Relationship with User model

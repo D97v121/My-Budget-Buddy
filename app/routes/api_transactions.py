@@ -55,7 +55,7 @@ def get_transactions():
             return jsonify({"error": "No access tokens found for user"}), 400
 
         for plaid_item in plaid_items:
-            access_token = plaid_item.access_token
+            access_token = plaid_item.decrypted_access_token
             cursor = plaid_item.cursor or ''
             print(f"==> Starting sync for access_token {access_token[:6]}..., cursor: {cursor}")
 
@@ -87,7 +87,7 @@ def get_transactions():
                 print(f"==> Fetching transactions with cursor: {cursor}")
                 try:
                     request = TransactionsSyncRequest(
-                        access_token=plaid_item.access_token,
+                        access_token = plaid_item.decrypted_access_token,
                         cursor=cursor,
                     )
                     response = client.transactions_sync(request).to_dict()
@@ -194,7 +194,7 @@ def get_transactions():
 
         starting_balances = {}
         for plaid_item in plaid_items:
-            accounts = get_account_balance(plaid_item.access_token)
+            accounts = get_account_balance(plaid_item.decrypted_access_token)
             for account in accounts:
                 account_id = account['account_id']
                 current_balance = account['balances']['current']
@@ -230,7 +230,7 @@ def get_transactions():
         print("416359 ==> Starting Opening Balance calculation")
         for plaid_item in plaid_items:
             print(f"416359 ==> Processing Plaid item: {plaid_item.item_id}")
-            accounts = get_account_balance(plaid_item.access_token)
+            accounts = get_account_balance(plaid_item.decrypted_access_token)
             for account in accounts:
                 account_id = account['account_id']
                 account_name = account['name']

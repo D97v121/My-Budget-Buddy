@@ -16,6 +16,9 @@ from werkzeug.security import generate_password_hash
 from dotenv import load_dotenv
 from sqlalchemy.exc import IntegrityError
 from werkzeug.security import generate_password_hash
+from plaid.model.sandbox_public_token_create_request_options import SandboxPublicTokenCreateRequestOptions
+from plaid.model.sandbox_public_token_create_request_options_transactions import SandboxPublicTokenCreateRequestOptionsTransactions
+
 load_dotenv()  # will pick up the same .env in dev
 # Initialize extensions
 db = SQLAlchemy()
@@ -114,6 +117,7 @@ def create_app():
     # in create_app() **after** db.init_app(app):
     _bootstrap_db(app)
     _ensure_demo_user(app)
+    _ensure_demo_plaid_token(app)
 
     # Health check: simple and cheap
     @app.get("/healthz")
@@ -149,3 +153,61 @@ def _ensure_demo_user(app):
         except IntegrityError:
             db.session.rollback()
             print("[seed] Demo user already exists; skipped")
+
+
+def _ensure_demo_plaid_token(app):
+    """Auto-seed a fresh Plaid sandbox token for the demo user on every boot."""
+    from app import db
+    from app.models.user import User
+    from app.models.plaid import PlaidItem
+    from app.plaid_helpers import client
+    from app.encryption_utils import encrypt_data
+    from plaid.model.sandbox_public_token_create_request import SandboxPublicTokenCreateRequest
+    from plaid.model.item_public_token_exchange_request import ItemPublicTokenExchangeRequest
+    from plaid.model.products import Products
+
+    demo_username = os.getenv("DEMO_USERNAME", "demo")
+
+    with app.app_context():
+        user = User.query.filter_by(username=demo_username).first()
+        if not user:
+            print("[plaid-seed] Demo user not found, skipping.")
+            return
+
+        # If they already have a working token, skip
+        existing = PlaidItem.query.filter_by(user_id=user.id).first()
+        if existing:
+            print("[plaid-seed] Demo user already has a PlaidItem, skipping.")
+            return
+
+        try:
+            # Create a sandbox public token for First Platypus Bank
+            public_token_response = client.sandbox_public_token_create(
+                SandboxPublicTokenCreateRequest(
+                    institution_id='ins_109508',  # First Platypus Bank - standard sandbox bank
+                    initial_products=[Products('transactions')]
+                )
+            )
+            public_token = public_token_response.public_token
+
+            # Exchange it for a real access token
+            exchange_response = client.item_public_token_exchange(
+                ItemPublicTokenExchangeRequest(public_token=public_token)
+            ).to_dict()
+
+            access_token = exchange_response['access_token']
+            item_id = exchange_response['item_id']
+
+            plaid_item = PlaidItem(
+                user_id=user.id,
+                item_id=item_id,
+                access_token=encrypt_data(access_token),  # match your encryption
+                institution_id='ins_109508',
+                institution_name='First Platypus Bank'
+            )
+            db.session.add(plaid_item)
+            db.session.commit()
+            print(f"[plaid-seed] Sandbox token seeded for demo user.")
+
+        except Exception as e:
+            print(f"[plaid-seed] Failed to seed Plaid token: {e}")
