@@ -19,7 +19,7 @@ def history():
     tags_list = Tags.query.filter_by(user_id=user_id).all()
     divisions_list = ['none', 'general', 'save', 'spend', 'give', 'invest', 'expense']
     
-    transactions = Transaction.query.filter_by(user_id=user_id).order_by(Transaction.timestamp).all()
+    transactions = Transaction.query.filter_by(user_id=user_id).order_by(Transaction.date.desc()).all()
     
     return render_template("history.html", transactions=transactions,
                            tags_list=tags_list, divisions_list=divisions_list,

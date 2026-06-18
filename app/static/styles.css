@@ -619,16 +619,16 @@ background-color: #16a085;
 
 /* Style individual selected tags */
 .selected-tag {
+  display: inline-flex;          /* horizontal flow */
   align-items: center;
-  justify-content: space-between;
-  max-width: 150px; /* Adjust the width as needed */
-  text-overflow: ellipsis;
-  display: flex;
-  padding: 5px 10px;
+  padding: 3px 8px;              /* tighter padding */
   background-color: #1abc9c;
   color: white;
   border-radius: 4px;
   font-size: 12px;
+  max-width: fit-content;        /* only as wide as the text */
+  width: auto;                   /* remove fixed width */
+  margin: 3px 4px 3px 0;        /* space between tags */
 }
 
 /* Style the remove button for tags */

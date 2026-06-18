@@ -12,7 +12,6 @@
         </div>
         <div class="text-center mb-4">
             <button id="refresh-transactions" class="btn btn-primary" type="button">Refresh Transactions</button>
-            <button id="refresh-divisions" class="btn btn-warning" type="button">Refresh Divisions</button>
             <button class="btn btn-success" id="openTransactionModal" type="button">Add Transactions</button>
             <button id="add-bankAccount-button" class="btn btn-info" type="button">Add Bank Account</button>
             <button class="btn btn-secondary" id="autofill-division-button" type="button">Autofill Transaction Division</button>
@@ -129,7 +128,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {% for transaction in transactions | reverse %}
+                    {% for transaction in transactions %}
                         <tr class="record-row" data-record-id="{{ transaction.id }}">
                             <td class="text-end column_width" data-column="name">{{ transaction.name }}</td>
                             <td class="text-end column_width" data-column="account">{{ transaction.bank_account }}</td>
@@ -248,19 +247,19 @@
                                     <input name="description" class="form-control" type="text" placeholder="Description (optional)" maxlength="60">
                                 </div>
                                 <div class="form-group">
-                                    <select required id="tag" class="form-control form-select">
+                                    <select required id="modal-tag" class="form-control form-select">
                                     <option class="select" disabled selected>Select tags</option>
                                     <option class="select" value="none">None</option>
                                     {% for tag in tags_list %}
                                         <option class="select" value="{{ tag.name }}">{{ tag.name }}</option>
                                     {% endfor %}
                                     </select>
-                                    <div id="selected-tags-container"></div>
+                                    <div id="modal-selected-tags-container"></div>
                                     <div id="create_tag_link">
                                     <a href= "{{ url_for('settings.tags') }}">Create tag</a>
                                     </div>
                                 </div> 
-                                <input type="hidden" name="tags" id="hidden-tags">
+                                <input type="hidden" name="tags" id="modal-hidden-tags">
                                 <button type="submit" id="submit1" class="btn">Submit</button>
                                 </form>
                             </div>
@@ -492,7 +491,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
     //refresh divisions logic, delete when done:
-    const refreshDivisionsButton = document.getElementById('refresh-divisions');
+    /* const refreshDivisionsButton = document.getElementById('refresh-divisions');
     refreshDivisionsButton.addEventListener('click', async function () {
         refreshDivisionsButton.textContent = "Refreshing Divisions...";
         refreshDivisionsButton.disabled = true;
@@ -520,10 +519,11 @@ document.addEventListener('DOMContentLoaded', function () {
             refreshDivisionsButton.disabled = false;
         }
     });
+    */
 
 document.getElementById("openTransactionModal").addEventListener("click", function () {
     document.getElementById("transactionModal").style.display = "block";
-    setupTagSelector();  // <-- initialize tag handling now that modal is visible
+    setupTagSelector('modal-tag', 'modal-selected-tags-container', 'modal-hidden-tags');
 });
 
 document.querySelector(".close-modal").addEventListener("click", function () {

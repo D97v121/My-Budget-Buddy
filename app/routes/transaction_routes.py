@@ -12,8 +12,6 @@ from app import csrf
 from sqlalchemy import func
 
 
-transaction_bp = Blueprint('transactions', __name__)
-
 from app.helpers import exit_usd, delete_record  # adjust import paths as needed
 from app import db
 
@@ -26,7 +24,7 @@ def update_record():
     division = request.form.get('division')
     record_id = request.form.get('record_id')
     amount = exit_usd(request.form.get('amount'))
-    bank_name = request.form.get('bank_name')
+    bank_account = request.form.get('bank_account')
     deleteBoolean = request.form.get('deleteBoolean')
     logging.debug(f"tag: {tag}")
 
@@ -43,7 +41,8 @@ def update_record():
     try:
         record.tag = tag
         record.amount = float(amount)
-        record.bank_name = bank_name
+        record.bank_account = request.form.get('bank_account')  # ← add this
+        record.bank_name = request.form.get('bank_name') or record.bank_name  # keep existing if blank
         record.division = division
         db.session.commit()
     except Exception as e:
@@ -116,7 +115,7 @@ def update_transaction(transaction_id):
             division = predicted_division
         record_id = transaction_id
         amount = exit_usd(request.form.get('amount'))
-        bank_name = request.form.get('bank_name')
+        bank_account = request.form.get('bank_account')
         deleteBoolean = request.form.get('deleteBoolean')
         date = request.form.get('date')
         time = request.form.get('time')
@@ -133,6 +132,12 @@ def update_transaction(transaction_id):
             # Find and delete the record
             record = Transaction.query.filter_by(id=transaction_id, user_id=user_id).first()
             if record:
+                from sqlalchemy import text
+                db.session.execute(
+                    text("DELETE FROM ai_categorization_log WHERE transaction_id = :tid"),
+                    {"tid": transaction_id}
+                )
+                db.session.flush()
                 db.session.delete(record)
                 db.session.commit()
                 logging.debug(f"Transaction ID {transaction_id} deleted successfully.")
@@ -151,11 +156,17 @@ def update_transaction(transaction_id):
         if division == "general":
             tag_objects = Tags.query.filter(Tags.name.in_(all_tags)).all()
             user = User.query.get(user_id)
-            calculateAllMoney(db, Transaction, tag_objects=tag_objects, money=amount, date=date, bank_name=bank_name, division=division, user=user)
+            calculateAllMoney(db, Transaction, tag_objects=tag_objects, money=amount, date=date, bank_name=record.bank_name, division=division, user=user)
             
             # Fetch the current transaction and delete it after calculation
             record = Transaction.query.filter_by(id=transaction_id, user_id=user_id).first()
             if record:
+                from sqlalchemy import text
+                db.session.execute(
+                    text("DELETE FROM ai_categorization_log WHERE transaction_id = :tid"),
+                    {"tid": transaction_id}
+                )
+                db.session.flush()
                 db.session.delete(record)
                 db.session.commit()
                 logging.debug(f"Transaction ID {transaction_id} deleted successfully.")
@@ -176,14 +187,14 @@ def update_transaction(transaction_id):
         print(f"Parsed time: {time}, name: {name}, note: {note}")
         try:
             record.amount = float(amount)
-            record.bank_name = bank_name
+            record.bank_account = request.form.get('bank_account')  # ← add this
+            record.bank_name = request.form.get('bank_name') or record.bank_name
             record.division = division
             record.timestamp = time
             record.date = date
             record.name = name
             record.note = note
             record.tags.clear()  # Clear existing tags
-            transaction.tags.clear()
             for tag_name in tag_names:
                 tag = Tags.query.filter_by(name=tag_name, user_id=user_id).first()
                 if tag:
@@ -195,6 +206,7 @@ def update_transaction(transaction_id):
 
         except Exception as e:
             db.session.rollback()
+            logging.error(f"Failed to update transaction {transaction_id}: {e}")
 
         return redirect(url_for('history_bp.history'))
     return redirect(url_for('history_bp.history')) 

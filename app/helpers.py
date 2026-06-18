@@ -241,6 +241,13 @@ def calculateDivision(db, Transaction, label, money, bank_name, tag_objects, div
 
             # Assign unique tags to the transaction
             db.session.add(new_record)
+            db.session.flush()  # get the new_record.id before commit
+
+            # ← ADD THESE TWO LINES
+            for tag in unique_tags:
+                if tag not in new_record.tags:
+                    new_record.tags.append(tag)
+
             db.session.commit()
             
             money_record = initialize_money_record(db)
