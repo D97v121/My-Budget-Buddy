@@ -38,33 +38,20 @@ A demo user (`demo` / `demo123`) and a sandbox Plaid account with transactions a
 
 ## Project Structure
 
-├── .gitignore  
-├── .python-version  
-├── .vscode/  
-├── app/  
-│   ├── __init__.py  
-│   ├── ai_helpers.py  
-│   ├── encryption_utils.py  
-│   ├── filters.py  
-│   ├── forms.py  
-│   ├── health.py  
-│   ├── helpers.py  
-│   ├── models/  
-│   ├── plaid_helpers.py  
-│   ├── routes/  
-│   ├── static/  
-│   └── templates/   
-├── instance/  
-│   └── money.db  
-├── main.py  
-├── migrations/  
-│   ├── alembic.ini  
-│   ├── env.py  
-│   ├── README  
-│   ├── script.py.mako  
-│   └── versions/  
-├── models.py  
-├── my_budget_buddy.db  
-├── Procfile   
-├── requirements.txt     
-└── wsgi.py  
+```
+My-Budget-Buddy/
+├── app/
+│   ├── __init__.py          # App factory, DB bootstrap, demo seeding
+│   ├── ai_helpers.py        # OpenAI chat assistant
+│   ├── encryption_utils.py  # Fernet token encryption
+│   ├── helpers.py           # Transaction classification, AI categorization
+│   ├── plaid_helpers.py     # Plaid client, account/institution helpers
+│   ├── models/              # SQLAlchemy models (User, Transaction, PlaidItem...)
+│   ├── routes/              # Blueprints (auth, plaid, transactions, history...)
+│   ├── static/              # CSS, JS
+│   └── templates/           # Jinja2 HTML templates
+├── migrations/              # Alembic migration scripts
+├── Procfile                 # Gunicorn entrypoint for DigitalOcean
+├── requirements.txt
+└── wsgi.py                  # WSGI entrypoint
+```
