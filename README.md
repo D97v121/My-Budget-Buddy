@@ -1,41 +1,41 @@
 # My-Budget-Buddy (MBB)
 
 ## What & Why
-My-Budget-Buddy is a full-stack personal finance web app that connects to real bank accounts via the Plaid API, tracks transactions, and helps users visualize and manage their spending across budget categories. It also features a fully integrated AI assistant that lets users interact with and query their financial data conversationally.
+My-Budget-Buddy is a full-stack personal finance web app built for teens and college students. It connects to real bank accounts via the Plaid API, automatically categorizes transactions using AI, and helps users visualize and manage their spending across budget categories (Save, Spend, Give, Invest). It also features a fully integrated AI assistant that lets users query their financial data conversationally.
 
-Live (demo): https://my-budget-buddy-mgzfh.ondigitalocean.app/
-Temporary login with one bank account already linked:  
-`username: demo`  
-`password: demo123`
+**Live demo:** https://my-budget-buddy.com  
+**Login:** `username: demo` · `password: demo123`
 
-Note: The demo uses Plaid's sandbox environment, so all bank data is simulated -- no real accounts are linked.
+> The demo uses Plaid's sandbox environment — all bank data is simulated, no real accounts are linked. A fresh sandbox bank account with pre-loaded transactions is automatically seeded on boot.
 
-<img width="1468" height="796" alt="Screenshot 2026-05-05 at 7 01 26 PM" src="https://github.com/user-attachments/assets/d5c296a1-4355-4f9c-a5f5-098944118469" />
+<img width="1470" height="786" alt="Screenshot 2026-06-18 at 10 11 16 AM" src="https://github.com/user-attachments/assets/f8956737-82e7-4e47-920a-1971abf4f1c3" />
 
 ## Tech
-Flask · SQLAlchemy · DigitalOcean App Platform (Postgres-ready)
+Flask · SQLAlchemy · PostgreSQL (Supabase) · DigitalOcean App Platform · Plaid API · OpenAI API
 
 ## Highlights
-- Productionized Flask: WSGI entrypoint (`wsgi.py`) + Procfile + Gunicorn configuration  
-- Reliability: health check route, idempotent DB bootstrap, safe defaults for demo mode  
-- Security basics: secrets via env vars, CSRF enabled, HTTPOnly/SameSite cookies  
-- Clean structure: Blueprints for routes/services; easy to extend to Postgres + migrations  
-  
-## Quick Start (demo mode — no Plaid setup)
+- **Plaid integration:** full OAuth bank linking flow, transaction sync with cursor-based pagination, encrypted access token storage, and auto-seeded sandbox demo account
+- **AI-powered categorization:** transactions are automatically categorized into budget divisions and tagged on sync using OpenAI
+- **AI chat assistant:** conversational interface lets users query their own financial data in natural language
+- **Productionized Flask:** WSGI entrypoint (`wsgi.py`) + Procfile + Gunicorn, health check route, idempotent DB bootstrap
+- **Security:** secrets via env vars, CSRF protection, HTTPOnly/SameSite cookies, Fernet encryption for Plaid tokens
+- **Clean architecture:** Blueprints for routes/services, Alembic migrations, PostgreSQL in production
+
+## Quick Start (demo mode — no Plaid setup needed)
 ```bash
 git clone github.com/D97v121/My-Budget-Buddy.git
 cd My-Budget-Buddy && python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 flask --app wsgi run --debug
 ```
-A demo user (demo / demo123) is seeded on first run.
+A demo user (`demo` / `demo123`) and a sandbox Plaid account with transactions are seeded automatically on first run.
 
 ## Roadmap
-- Migrate prod DB to Postgres with Alembic migrations
-- Add pytest coverage for routes/services
-- Build charts & insights (categorization, trends, cash flow)
-- Complete AI integration
-  
+- Add pytest coverage for routes and services
+- Expand charts and insights (trends, cash flow, month-over-month comparisons)
+- Push notifications for budget thresholds
+- Mobile-responsive design improvements
+
 ## Project Structure
 
 ├── .gitignore  
