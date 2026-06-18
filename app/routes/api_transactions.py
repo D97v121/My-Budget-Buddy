@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify, session, request as flask_request
 from flask_login import login_required
 from app import db
+from sqlalchemy import func
 from app.plaid_helpers import client
 from app.models import Transaction, PlaidItem, Tags
 from app.helpers import (
@@ -200,8 +201,8 @@ def get_transactions():
                 if str(account.get('subtype', '')).lower() not in ALLOWED_SUBTYPES:
                     continue
                 account_id = account['account_id']
+                account_name = account['name']
                 current_balance = account['balances']['current']
-
                 # Sum transactions for this account in your DB
                 total_transactions = db.session.query(
                     db.func.sum(Transaction.amount)
@@ -229,76 +230,10 @@ def get_transactions():
             }
             for txn in all_transactions[:10]
         ]
+        # Run AI categorization if any new transactions were added
+        if new_transactions_count > 0:
+            _run_ai_categorization(user_id)
 
-        print("416359 ==> Starting Opening Balance calculation")
-        for plaid_item in plaid_items:
-            print(f"416359 ==> Processing Plaid item: {plaid_item.item_id}")
-            bank_name = fetch_institution_name(plaid_item.decrypted_access_token)
-            accounts = get_account_balance(plaid_item.decrypted_access_token)
-            for account in accounts:
-                if str(account.get('subtype', '')).lower() not in ALLOWED_SUBTYPES:
-                    continue
-            for account in accounts:
-                account_id = account['account_id']
-                account_name = account['name']
-                current_balance = account['balances']['current']
-                print(f"416359 ==> Account {account_name} ({account_id}) current balance: {current_balance}")
-
-                # Sum all transactions in DB for this account
-                total_transactions = db.session.query(
-                    db.func.sum(Transaction.amount)
-                ).filter_by(user_id=user_id, account_id=account_id).scalar() or 0.0
-                print(f"416359 ==> Total transactions sum for {account_name}: {total_transactions}")
-
-                starting_balance = current_balance - total_transactions
-                print(f"416359 ==> Calculated starting balance for {account_name}: {starting_balance}")
-
-                # Check if an opening balance transaction already exists
-                opening_exists = Transaction.query.filter_by(
-                    user_id=user_id,
-                    account_id=account_id,
-                    name="Opening Balance"
-                ).first()
-
-                if not opening_exists:
-                    print(f"416359 ==> No Opening Balance transaction found for {account_name}, creating one.")
-                    # Get the oldest transaction date for this account
-                    oldest_txn = Transaction.query.filter_by(
-                        user_id=user_id,
-                        account_id=account_id
-                    ).order_by(Transaction.date.asc()).first()
-
-                    if oldest_txn:
-                        opening_date = oldest_txn.date - timedelta(days=1)
-                        print(f"416359 ==> Oldest txn date for {account_name}: {oldest_txn.date}, opening date set to {opening_date}")
-                    else:
-                        opening_date = datetime.utcnow().date()
-                        print(f"416359 ==> No transactions found for {account_name}, using today as opening date: {opening_date}")
-
-                    opening_txn = Transaction(
-                        user_id=user_id,
-                        transaction_id=f"opening-{account_id}",
-                        date=opening_date,
-                        timestamp=datetime.utcnow(),
-                        name="Opening Balance",
-                        division="balance",
-                        amount=starting_balance,
-                        account_id=account_id,
-                        bank_account=account_name,
-                        bank_name=bank_name,
-                        item_id=plaid_item.item_id,
-                        pending=False
-                    )
-                    db.session.add(opening_txn)
-                    print(f"416359 ==> Added Opening Balance for {account_name}: {starting_balance}")
-                else:
-                    print(f"416359 ==> Opening Balance transaction already exists for {account_name}, skipping.")
-
-        db.session.commit()
-        print("416359 ==> Finished Opening Balance calculation")
-
-
-        
         return jsonify({
             "status": "success",
             "new_transactions": new_transactions_count,
@@ -329,7 +264,52 @@ def refresh_transactions():
         logging.error(f"Error refreshing transactions: {e}", exc_info=True)
         return jsonify({"status": "error", "message": "Failed to refresh transactions"}), 500
 
+def _run_ai_categorization(user_id):
+    """Run AI division and tag prediction for all uncategorized transactions."""
+    from app.models import Tags
+    from app.ai_helpers import predict_transaction_division, predict_transaction_tags
 
+    try:
+        # Autofill divisions
+        uncategorized = Transaction.query.filter(
+            Transaction.user_id == user_id,
+            (Transaction.division.is_(None)) | (func.lower(Transaction.division) == "none")
+        ).all()
 
+        for t in uncategorized:
+            try:
+                t.division = predict_transaction_division(t)
+                db.session.add(t)
+            except Exception as e:
+                print(f"[ai-categorize] Division prediction failed for {t.id}: {e}")
 
+        db.session.commit()
+        print(f"[ai-categorize] Divisions updated for {len(uncategorized)} transactions.")
 
+        # Autofill tags
+        untagged = Transaction.query.filter(
+            Transaction.user_id == user_id,
+            ~Transaction.tags.any()
+        ).all()
+
+        for t in untagged:
+            try:
+                predicted_tags = predict_transaction_tags(t)
+                for tag_name in predicted_tags:
+                    tag = Tags.query.filter_by(user_id=user_id, name=tag_name).first()
+                    if not tag:
+                        tag = Tags(user_id=user_id, name=tag_name)
+                        db.session.add(tag)
+                        db.session.flush()
+                    if tag not in t.tags:
+                        t.tags.append(tag)
+                db.session.add(t)
+            except Exception as e:
+                print(f"[ai-categorize] Tag prediction failed for {t.id}: {e}")
+
+        db.session.commit()
+        print(f"[ai-categorize] Tags updated for {len(untagged)} transactions.")
+
+    except Exception as e:
+        db.session.rollback()
+        print(f"[ai-categorize] Categorization failed: {e}")

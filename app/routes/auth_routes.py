@@ -27,12 +27,23 @@ def login():
             logging.warning("Invalid login attempt")
             return render_template("login.html", form=form, error_message="Incorrect username or password")
 
-        # ✅ Log the user in properly
         login_user(user, remember=True, duration=timedelta(days=30))
-
-        # Optional: regenerate CSRF and redirect
         session["csrf_token"] = generate_csrf()
         logging.info(f"User logged in: {user.username}")
+
+        # Auto-sync transactions on first login if user has a linked bank but no transactions
+        try:
+            from app.models import PlaidItem, Transaction
+            has_plaid = PlaidItem.query.filter_by(user_id=user.id).first()
+            has_transactions = Transaction.query.filter_by(user_id=user.id).first()
+            if has_plaid and not has_transactions:
+                from app.routes.api_transactions import get_transactions
+                get_transactions()
+                logging.info(f"Auto-synced transactions for user {user.username} on first login.")
+        except Exception as e:
+            logging.error(f"Auto-sync failed on login: {e}")
+            # Don't block login if sync fails
+
         return redirect("/")
 
     return render_template("login.html", form=form)

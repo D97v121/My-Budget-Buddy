@@ -157,16 +157,22 @@ def _ensure_demo_user(app):
 
 def _ensure_demo_plaid_token(app):
     """Auto-seed a fresh Plaid sandbox token for the demo user on every boot."""
-    from app import db
     from app.models.user import User
     from app.models.plaid import PlaidItem
-    from app.plaid_helpers import client
+    from app.models import Transaction
+    from app.plaid_helpers import client, fetch_institution_name
+    from app.routes.api_transactions import get_account_balance
     from app.encryption_utils import encrypt_data
+    from app.helpers import classify_transaction_amount, edit_transaction_name
     from plaid.model.sandbox_public_token_create_request import SandboxPublicTokenCreateRequest
     from plaid.model.item_public_token_exchange_request import ItemPublicTokenExchangeRequest
+    from plaid.model.transactions_get_request import TransactionsGetRequest
+    from plaid.model.transactions_get_request_options import TransactionsGetRequestOptions
     from plaid.model.products import Products
+    from datetime import datetime, timedelta, date
 
     demo_username = os.getenv("DEMO_USERNAME", "demo")
+    ALLOWED_SUBTYPES = {'checking', 'savings', 'credit card'}
 
     with app.app_context():
         user = User.query.filter_by(username=demo_username).first()
@@ -174,40 +180,177 @@ def _ensure_demo_plaid_token(app):
             print("[plaid-seed] Demo user not found, skipping.")
             return
 
-        # If they already have a working token, skip
         existing = PlaidItem.query.filter_by(user_id=user.id).first()
         if existing:
-            print("[plaid-seed] Demo user already has a PlaidItem, skipping.")
-            return
+            txn_count = Transaction.query.filter_by(user_id=user.id).count()
+            if txn_count > 0:
+                print(f"[plaid-seed] Demo user already has {txn_count} transactions, skipping.")
+                return
+            plaid_item = existing
+            print("[plaid-seed] PlaidItem exists but no transactions — will sync.")
+        else:
+            try:
+                public_token_response = client.sandbox_public_token_create(
+                    SandboxPublicTokenCreateRequest(
+                        institution_id='ins_109508',
+                        initial_products=[Products('transactions')]
+                    )
+                )
+                public_token = public_token_response.public_token
+
+                exchange_response = client.item_public_token_exchange(
+                    ItemPublicTokenExchangeRequest(public_token=public_token)
+                ).to_dict()
+
+                access_token = exchange_response['access_token']
+                item_id = exchange_response['item_id']
+
+                plaid_item = PlaidItem(
+                    user_id=user.id,
+                    item_id=item_id,
+                    access_token=encrypt_data(access_token),
+                    institution_id='ins_109508',
+                    institution_name='First Platypus Bank'
+                )
+                db.session.add(plaid_item)
+                db.session.commit()
+                print("[plaid-seed] Sandbox token seeded for demo user.")
+
+            except Exception as e:
+                print(f"[plaid-seed] Failed to seed Plaid token: {e}")
+                return
 
         try:
-            # Create a sandbox public token for First Platypus Bank
-            public_token_response = client.sandbox_public_token_create(
-                SandboxPublicTokenCreateRequest(
-                    institution_id='ins_109508',  # First Platypus Bank - standard sandbox bank
-                    initial_products=[Products('transactions')]
-                )
-            )
-            public_token = public_token_response.public_token
+            access_token = plaid_item.decrypted_access_token
+            new_count = 0
+            offset = 0
+            start_date = date.today() - timedelta(days=730)
+            end_date = date.today()
 
-            # Exchange it for a real access token
-            exchange_response = client.item_public_token_exchange(
-                ItemPublicTokenExchangeRequest(public_token=public_token)
-            ).to_dict()
+            # Plaid sandbox needs a moment to prepare transactions
+            import time
+            max_attempts = 5
+            for attempt in range(max_attempts):
+                try:
+                    print(f"[plaid-seed] Waiting for Plaid to prepare transactions (attempt {attempt + 1})...")
+                    time.sleep(10)
 
-            access_token = exchange_response['access_token']
-            item_id = exchange_response['item_id']
+                    while True:
+                        txn_request = TransactionsGetRequest(
+                            access_token=access_token,
+                            start_date=start_date,
+                            end_date=end_date,
+                            options=TransactionsGetRequestOptions(
+                                count=500,
+                                offset=offset
+                            )
+                        )
+                        txn_response = client.transactions_get(txn_request).to_dict()
+                        transactions = txn_response.get('transactions', [])
 
-            plaid_item = PlaidItem(
-                user_id=user.id,
-                item_id=item_id,
-                access_token=encrypt_data(access_token),  # match your encryption
-                institution_id='ins_109508',
-                institution_name='First Platypus Bank'
-            )
-            db.session.add(plaid_item)
+                        if not transactions:
+                            break
+
+                        # Build account map so we can look up names by account_id
+                        account_details = get_account_balance(access_token)
+                        account_map = {
+                            acct['account_id']: acct['name']
+                            for acct in account_details
+                        }
+
+
+                        for txn in transactions:
+                            txn_id = txn['transaction_id']
+                            if Transaction.query.filter_by(transaction_id=txn_id).first():
+                                continue
+
+                            date_str = str(txn.get('date', ''))
+                            try:
+                                parsed_timestamp = datetime.fromisoformat(f"{date_str}T12:00:00")
+                            except Exception:
+                                parsed_timestamp = datetime.utcnow()
+
+                            new_txn = Transaction(
+                                user_id=user.id,
+                                transaction_id=txn_id,
+                                date=txn['date'],
+                                timestamp=parsed_timestamp,
+                                name=edit_transaction_name(txn['name']),
+                                division='none',
+                                amount=classify_transaction_amount(txn),
+                                account_id=txn.get('account_id'),
+                                bank_account=account_map.get(txn.get('account_id'), 'First Platypus Bank'),
+                                bank_name='First Platypus Bank',
+                                item_id=plaid_item.item_id,
+                                pending=txn.get('pending', False)
+                            )
+                            db.session.add(new_txn)
+                            new_count += 1
+
+                        offset += len(transactions)
+                        if offset >= txn_response.get('total_transactions', 0):
+                            break
+
+                    # If we got here without an exception, break the retry loop
+                    break
+
+                except Exception as e:
+                    if 'PRODUCT_NOT_READY' in str(e):
+                        print(f"[plaid-seed] Product not ready, retrying...")
+                        offset = 0  # reset offset for next attempt
+                        continue
+                    else:
+                        raise  # re-raise non-retryable errors
+
             db.session.commit()
-            print(f"[plaid-seed] Sandbox token seeded for demo user.")
+            print(f"[plaid-seed] Synced {new_count} transactions for demo user.")
+
+            # Create opening balances
+            bank_name = fetch_institution_name(access_token)
+            accounts = get_account_balance(access_token)
+            for account in accounts:
+                if str(account.get('subtype', '')).lower() not in ALLOWED_SUBTYPES:
+                    continue
+                account_id = account['account_id']
+                account_name = account['name']
+                current_balance = account['balances']['current']
+
+                if Transaction.query.filter_by(
+                    user_id=user.id,
+                    account_id=account_id,
+                    name="Opening Balance"
+                ).first():
+                    continue
+
+                oldest_txn = Transaction.query.filter_by(
+                    user_id=user.id,
+                    account_id=account_id
+                ).order_by(Transaction.date.asc()).first()
+
+                opening_date = (oldest_txn.date - timedelta(days=1)) if oldest_txn else date.today()
+
+                db.session.add(Transaction(
+                    user_id=user.id,
+                    transaction_id=f"opening-{account_id}",
+                    date=opening_date,
+                    timestamp=datetime.utcnow(),
+                    name="Opening Balance",
+                    division="balance",
+                    amount=current_balance,
+                    account_id=account_id,
+                    bank_account=account_name,
+                    bank_name=bank_name,
+                    item_id=plaid_item.item_id,
+                    pending=False
+                ))
+            db.session.commit()
+            print("[plaid-seed] Opening balances created.")
+
+            # Run AI categorization
+            from app.routes.api_transactions import _run_ai_categorization
+            _run_ai_categorization(user.id)
+            print("[plaid-seed] AI categorization complete.")
 
         except Exception as e:
-            print(f"[plaid-seed] Failed to seed Plaid token: {e}")
+            db.session.rollback()
+            print(f"[plaid-seed] Failed to sync transactions: {e}")

@@ -832,50 +832,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 });
-document.addEventListener('DOMContentLoaded', async () => {
-    // After transactions load, check if initial sync
-    const transactionsResp = await fetch('/api/transactions');
-    const transactionsData = await transactionsResp.json();
-    if (data.status === "success" && data.show_categorization_modal) {
-        const choiceModal = new bootstrap.Modal(document.getElementById('categorizationChoiceModal'));
-        choiceModal.show();
-
-        document.getElementById('chooseAI').addEventListener('click', async () => {
-            choiceModal.hide();
-            // Run AI categorization
-            await fetch('/api/autofill_divisions', { method: 'POST' });
-            // Load division summary
-            const summaryResp = await fetch('/api/division_summary');
-            const summaryData = await summaryResp.json();
-
-            let html = '';
-            for (const [div, total] of Object.entries(summaryData.division_totals)) {
-                html += `<p><strong>${div}:</strong> $${total.toFixed(2)}</p>`;
-            }
-            document.getElementById('divisionSummaryContent').innerHTML = html;
-            document.getElementById('startingBalanceInput').value = summaryData.starting_balance.amount;
-            document.getElementById('startingBalanceDate').innerText = `As of: ${summaryData.starting_balance.date}`;
-
-            const summaryModal = new bootstrap.Modal(document.getElementById('divisionSummaryModal'));
-            summaryModal.show();
-
-            document.getElementById('saveStartingBalance').addEventListener('click', async () => {
-                const newAmount = parseFloat(document.getElementById('startingBalanceInput').value);
-                await fetch('/api/update_starting_balance', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ amount: newAmount })
-                });
-                summaryModal.hide();
-                window.location.reload();
-            });
-        });
-
-        document.getElementById('chooseManual').addEventListener('click', () => {
-            choiceModal.hide();
-        });
-    }
-});
 
 </script>
 {% endblock %}
