@@ -40,6 +40,11 @@ def create_app():
     db_url = os.getenv('DATABASE_URL', 'sqlite:///money.db')
     app.config["SQLALCHEMY_DATABASE_URI"] = db_url
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    if not db_url.startswith("sqlite"):
+        app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+            "pool_pre_ping": True,
+            "pool_recycle": 280,
+        }
     app.config['SECRET_KEY'] = 'super-secret-key'
     app.config['SESSION_TYPE'] = 'filesystem'
     app.config["SESSION_PERMANENT"] = False
