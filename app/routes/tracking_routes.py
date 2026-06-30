@@ -29,6 +29,7 @@ def tracking():
     ).filter(Transaction.user_id == user_id).scalar()
 
     date_format = "YYYY-MM-DD" if unique_dates_count <= 30 else "YYYY-MM"
+    
 
     def get_graph_data_for_division(division_name):
         period = func.to_char(Transaction.date, date_format).label('period')
@@ -38,15 +39,20 @@ def tracking():
             func.sum(Transaction.amount)
         ).filter_by(user_id=user_id, division=division_name)\
          .group_by(period).order_by(period).all()
+        
+        print(f"[{division_name}] raw period sums: {results}")  # <-- add this
 
         running_total = 0
         dates = []
         values = []
+        
 
         for period_val, amount in results:
             running_total += amount
             dates.append(period_val)
             values.append(running_total)
+
+        print(f"[{division_name}] cumulative values: {values}")  # <-- add this
 
         return values, dates
 

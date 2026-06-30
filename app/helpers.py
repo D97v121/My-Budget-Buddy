@@ -110,34 +110,11 @@ def lookup(symbol):
 
 def classify_transaction_amount(txn):
     """
-    Returns a reversed-sign amount based on Plaid's direction logic and account type.
-    This assumes your system treats incoming money as negative (e.g., credit) and spending as positive.
+    Returns the amount using Plaid's native sign convention:
+    positive = money left the account (spending/outflow),
+    negative = money came into the account (income/inflow).
     """
-    raw_amount = txn.get("amount", 0)
-    direction = (txn.get("direction") or "").upper()
-    account_type = (txn.get("account_type") or "").lower()  # e.g., 'credit', 'depository'
-
-    # Safety check
-    if direction not in {"INFLOW", "OUTFLOW"}:
-        print(f"[warning] Unknown direction for transaction: {txn.get('name')}")
-        return -raw_amount  # fallback: reversed sign just in case
-
-    if account_type == "credit":
-        # For credit cards:
-        if direction == "OUTFLOW":
-            return -abs(raw_amount)  # card charge → negative
-        elif direction == "INFLOW":
-            return abs(raw_amount)   # payment/refund → positive
-    else:
-        # For checking, savings, and debit:
-        if direction == "OUTFLOW":
-            return abs(raw_amount)   # money out → positive
-        elif direction == "INFLOW":
-            return -abs(raw_amount)  # money in → negative
-
-    return -raw_amount  # fallback
-
-
+    return txn.get("amount", 0)
 
 
 def usd(value):
