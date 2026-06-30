@@ -25,25 +25,27 @@ def tracking():
     total_dict = defaultdict(float, {division.lower(): amount for division, amount in totals})
 
     unique_dates_count = db.session.query(
-        func.count(func.distinct(func.strftime('%Y-%m-%d', Transaction.date)))
+        func.count(func.distinct(func.to_char(Transaction.date, 'YYYY-MM-DD')))
     ).filter(Transaction.user_id == user_id).scalar()
 
-    date_format = "%Y-%m-%d" if unique_dates_count <= 30 else "%Y-%m"
+    date_format = "YYYY-MM-DD" if unique_dates_count <= 30 else "YYYY-MM"
 
     def get_graph_data_for_division(division_name):
+        period = func.to_char(Transaction.date, date_format).label('period')
+
         results = db.session.query(
-            func.strftime(date_format, Transaction.date).label('period'),
+            period,
             func.sum(Transaction.amount)
         ).filter_by(user_id=user_id, division=division_name)\
-         .group_by('period').order_by('period').all()
+         .group_by(period).order_by(period).all()
 
         running_total = 0
         dates = []
         values = []
 
-        for period, amount in results:
+        for period_val, amount in results:
             running_total += amount
-            dates.append(period)
+            dates.append(period_val)
             values.append(running_total)
 
         return values, dates
